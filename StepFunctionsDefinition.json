@@ -1,0 +1,88 @@
+{
+  "Comment": "An example of using Bedrock to send a prompt to two models in parallel and compare their responses.",
+  "StartAt": "Parallel Invocation",
+  "States": {
+    "Parallel Invocation": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "ClaudeInstant V1",
+          "States": {
+            "ClaudeInstant V1": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::bedrock:invokeModel",
+              "Parameters": {
+                "ModelId": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-instant-v1",
+                "Body": {
+                  "prompt.$": "$.prompt",
+                  "max_tokens_to_sample": 2000
+                },
+                "ContentType": "application/json",
+                "Accept": "*/*"
+              },
+              "End": true,
+              "ResultPath": "$.model1_result"
+            }
+          }
+        },
+        {
+          "StartAt": "Claude Haiku",
+          "States": {
+            "Claude Haiku": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::bedrock:invokeModel",
+              "Parameters": {
+                "ModelId": "anthropic.claude-3-haiku-20240307-v1:0",
+                "Body": {
+                  "anthropic_version": "bedrock-2023-05-31",
+                  "max_tokens": 2000,
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text.$": "$.prompt"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "ContentType": "application/json",
+                "Accept": "*/*"
+              },
+              "End": true,
+              "ResultPath": "$.model2_result"
+            }
+          }
+        }
+      ],
+      "Next": "Sonnet - Compare Results"
+    },
+    "Sonnet - Compare Results": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::bedrock:invokeModel",
+      "Parameters": {
+        "ModelId": "anthropic.claude-3-sonnet-20240229-v1:0",
+        "Body": {
+          "anthropic_version": "bedrock-2023-05-31",
+          "max_tokens": 2000,
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text.$": "States.Format('Compare the following two model outputs and determine which one performs better based on the given prompt and rubric. Do not compare the model outputs with the example output but use it as standard for comparison.\n\nPrompt:\n{}\n\nModel 1 Output:\n{}\n\nModel 2 Output:\n{}\n\nRubric:\n{}\n\nExample Output (for reference only):\n{}', $[0].prompt, $[0].model1_result.Body.completion, $[1].model2_result.Body.content[0].text, $[0].rubric, $[0].example_output)"
+                }
+              ]
+            }
+          ]
+        },
+        "ContentType": "application/json",
+        "Accept": "application/json"
+      },
+      "End": true
+    }
+  }
+}
